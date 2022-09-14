@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,18 +18,12 @@ func validateParams(operation string, folder string, filename string) (bool, str
 	} else if operation != "flat" && operation != "restore" {
 		msg = "Operation must be either flat or restore"
 		valid = false
-	} else if !fs.ValidPath(folder) {
-		msg = "Invalid folder"
-		valid = false
 	} else if fileInfo, err := os.Stat(folder); err != nil || !fileInfo.IsDir() {
 		msg = "Invalid Folder"
 		valid = false
-	} else if !fs.ValidPath(filename) {
-		msg = "Invalid file name"
-		valid = false
 	} else if operation == "flat" {
-		if fileInfo, err := os.Stat(filename); err == nil || !strings.Contains(err.Error(), "The system cannot find the file specified") {
-			if err != nil && !strings.Contains(err.Error(), "The system cannot find the file specified") {
+		if fileInfo, err := os.Stat(filename); err == nil || !os.IsNotExist(err) {
+			if err != nil && !os.IsNotExist(err) {
 				msg = err.Error()
 			} else if fileInfo.IsDir() {
 				msg = "Invalid file name"
@@ -39,9 +32,17 @@ func validateParams(operation string, folder string, filename string) (bool, str
 			}
 			valid = false
 		}
+		if valid {
+			file, err := os.Create(filename)
+			if err != nil {
+				msg = err.Error()
+				valid = false
+			}
+			file.Close()
+		}
 	} else {
 		if fileInfo, err := os.Stat(filename); err != nil || fileInfo.IsDir() {
-			if err != nil && strings.Contains(err.Error(), "The system cannot find the file specified") {
+			if err != nil && os.IsNotExist(err) {
 				msg = "File does not exist"
 			} else {
 				msg = "Invalid file name"
@@ -150,15 +151,15 @@ func main() {
 	filename := flag.String("filename", "", "File name where video files data is stored")
 	flag.Parse()
 
+	if !strings.HasSuffix(*folder, "/") {
+		*folder = *folder + "/"
+	}
+
 	if valid, msg := validateParams(*operation, *folder, *filename); !valid {
 		fmt.Println(msg)
 		fmt.Println("")
 		flag.PrintDefaults()
 		return
-	}
-
-	if !strings.HasSuffix(*folder, "\\") {
-		*folder = *folder + "\\"
 	}
 
 	if *operation == "flat" {
