@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "args": ["-operation","restore","-folder","D:\\test\\","-filename","D:\\files.txt"],
+            "args": ["-operation","restore","-folder","E:\\Test\\","-filename","E:\\NikonD7500_Files.txt","-year=true"],
         }
     ]
 }

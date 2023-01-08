@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const separator = "???"
+
 func validateParams(operation string, folder string, filename string) (bool, string) {
 	valid := true
 	msg := ""
@@ -44,6 +46,8 @@ func validateParams(operation string, folder string, filename string) (bool, str
 		if fileInfo, err := os.Stat(filename); err != nil || fileInfo.IsDir() {
 			if err != nil && os.IsNotExist(err) {
 				msg = "File does not exist"
+			} else if fileInfo.IsDir() {
+				msg = "Invalid file name"
 			} else {
 				msg = "Invalid file name"
 			}
@@ -54,7 +58,7 @@ func validateParams(operation string, folder string, filename string) (bool, str
 	return valid, msg
 }
 
-func flat(folder string, filename string) {
+func flat(folder string, filename string, year bool) {
 	f, err := os.Create(filename)
 	if err != nil {
 		panic(err)
@@ -62,21 +66,31 @@ func flat(folder string, filename string) {
 	defer f.Close()
 
 	files := []string{}
+	subFolders := []string{}
 	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		originalName := info.Name()
-		fileDir := path[:len(path)-len(originalName)]
-		newName := "" + fmt.Sprintf("%d%02d%02d", info.ModTime().Year(), info.ModTime().Month(), info.ModTime().Day()) + "_" + originalName
-		if !info.IsDir() && strings.HasSuffix(strings.ToLower(originalName), ".mp4") {
-			line := fileDir + "???" + originalName + "???" + newName
-			files = append(files, line)
-			_, err := f.WriteString(line + "\n")
-			if err != nil {
-				return err
-			}
+
+		if info.IsDir() {
+			subFolders = append(subFolders, path)
+			return nil
 		}
+
+		originalName := info.Name()
+		if !strings.HasSuffix(strings.ToLower(originalName), ".mp4") {
+			return nil
+		}
+
+		fileDir := path[:len(path)-len(originalName)]
+		newName := fmt.Sprintf("%d%02d%02d", info.ModTime().Year(), info.ModTime().Month(), info.ModTime().Day()) + "_" + originalName
+		line := fileDir + separator + originalName + separator + newName
+		files = append(files, line)
+		_, err = f.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -84,31 +98,32 @@ func flat(folder string, filename string) {
 	}
 
 	for _, line := range files {
-		parts := strings.Split(line, "???")
+		parts := strings.Split(line, separator)
+		if year {
+			parts[2] = parts[2][:4] + string(os.PathSeparator) + parts[2]
+			newSubFolder := folder + parts[2][:4] + string(os.PathSeparator)
+			err := os.MkdirAll(newSubFolder, os.ModePerm)
+			if err != nil {
+				panic(err)
+			}
+		}
 		err := os.Rename(parts[0]+parts[1], folder+parts[2])
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() && path != folder {
-			err = os.RemoveAll(path)
+	for _, subFolder := range subFolders {
+		if subFolder != folder {
+			err = os.RemoveAll(subFolder)
 			if err != nil {
-				return err
+				panic(err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		panic(err)
 	}
 }
 
-func restore(folder string, filename string) {
+func restore(folder string, filename string, year bool) {
 	f, err := os.Open(filename)
 	if err != nil {
 		panic(err)
@@ -122,15 +137,28 @@ func restore(folder string, filename string) {
 	}
 	f.Close()
 
+	subFolders := []string{}
 	for _, line := range files {
-		parts := strings.Split(line, "???")
+		parts := strings.Split(line, separator)
 
 		err := os.MkdirAll(parts[0], os.ModePerm)
 		if err != nil {
 			panic(err)
 		}
 
+		if year {
+			parts[2] = parts[2][:4] + string(os.PathSeparator) + parts[2]
+			subFolders = append(subFolders, folder+parts[2][:4]+string(os.PathSeparator))
+		}
+
 		err = os.Rename(folder+parts[2], parts[0]+parts[1])
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	for _, subFolder := range subFolders {
+		err = os.RemoveAll(subFolder)
 		if err != nil {
 			panic(err)
 		}
@@ -149,10 +177,11 @@ func main() {
 	operation := flag.String("operation", "", "flat or restore")
 	folder := flag.String("folder", "", "Folder where the video files are")
 	filename := flag.String("filename", "", "File name where video files data is stored")
+	year := flag.Bool("year", false, "Flat video files by year")
 	flag.Parse()
 
-	if !strings.HasSuffix(*folder, "/") {
-		*folder = *folder + "/"
+	if !strings.HasSuffix(*folder, string(os.PathSeparator)) {
+		*folder = *folder + string(os.PathSeparator)
 	}
 
 	if valid, msg := validateParams(*operation, *folder, *filename); !valid {
@@ -163,8 +192,8 @@ func main() {
 	}
 
 	if *operation == "flat" {
-		flat(*folder, *filename)
+		flat(*folder, *filename, *year)
 	} else {
-		restore(*folder, *filename)
+		restore(*folder, *filename, *year)
 	}
 }
