@@ -58,7 +58,7 @@ func validateParams(operation string, folder string, filename string) (bool, str
 	return valid, msg
 }
 
-func flat(folder string, filename string, year bool) {
+func flat(folder string, filename string, year bool, extension string) {
 	f, err := os.Create(filename)
 	if err != nil {
 		panic(err)
@@ -78,7 +78,7 @@ func flat(folder string, filename string, year bool) {
 		}
 
 		originalName := info.Name()
-		if !strings.HasSuffix(strings.ToLower(originalName), ".mp4") {
+		if !strings.HasSuffix(strings.ToLower(originalName), "."+extension) {
 			return nil
 		}
 
@@ -176,6 +176,7 @@ func main() {
 
 	operation := flag.String("operation", "", "flat or restore")
 	folder := flag.String("folder", "", "Folder where the video files are")
+	extension := flag.String("extension", "", "Video file extension")
 	filename := flag.String("filename", "", "File name where video files data is stored")
 	year := flag.Bool("year", false, "Flat video files by year")
 	flag.Parse()
@@ -192,7 +193,7 @@ func main() {
 	}
 
 	if *operation == "flat" {
-		flat(*folder, *filename, *year)
+		flat(*folder, *filename, *year, *extension)
 	} else {
 		restore(*folder, *filename, *year)
 	}
